@@ -45,9 +45,8 @@
 #include <pluginlib/class_list_macros.hpp>
 #include <sstream>
 
-
 /**
- * \class cartesian_controller_base::ForwardDynamicsSolver 
+ * \class cartesian_controller_base::ForwardDynamicsSolver
  *
  * Users may explicitly specify it with \a "forward_dynamics" as \a ik_solver
  * in their controllers.yaml configuration file for each controller:
@@ -67,38 +66,76 @@
  */
 PLUGINLIB_EXPORT_CLASS(cartesian_controller_base::ForwardDynamicsSolver, cartesian_controller_base::IKSolver)
 
-
-
-
-
-namespace cartesian_controller_base{
+namespace cartesian_controller_base
+{
 
   ForwardDynamicsSolver::ForwardDynamicsSolver()
   {
   }
 
-  ForwardDynamicsSolver::~ForwardDynamicsSolver(){}
+  ForwardDynamicsSolver::~ForwardDynamicsSolver() {}
 
   trajectory_msgs::msg::JointTrajectoryPoint ForwardDynamicsSolver::getJointControlCmds(
-        rclcpp::Duration period,
-        const ctrl::Vector6D& net_force)
+      rclcpp::Duration period,
+      const ctrl::Vector6D &net_force)
   {
 
     // Compute joint space inertia matrix with actualized link masses
     buildGenericModel();
-    m_jnt_space_inertia_solver->JntToMass(m_current_positions,m_jnt_space_inertia);
+    m_jnt_space_inertia_solver->JntToMass(m_current_positions, m_jnt_space_inertia);
 
     // Compute joint jacobian
-    m_jnt_jacobian_solver->JntToJac(m_current_positions,m_jnt_jacobian);
+    m_jnt_jacobian_solver->JntToJac(m_current_positions, m_jnt_jacobian);
+
+    Eigen::VectorXd tau_0 = Eigen::VectorXd(m_number_joints);
+    Eigen::MatrixXd activation_matrix = m_postural_joints.asDiagonal();
+    Eigen::MatrixXd Kp =  m_post_kp *  Eigen::MatrixXd::Identity(m_number_joints, m_number_joints);
+    // std::cout<< (m_postural_conf(2) -  m_current_positions.data(2));
+
+    Eigen::VectorXd error = (activation_matrix * (m_postural_conf - m_current_positions.data).transpose() * (m_postural_conf - m_current_positions.data));
+
+    // invert values
+    for (int i=0; i < m_number_joints; i++)
+    {
+      // check if joint i has a postural task
+      if (abs(activation_matrix(i,i) - 1.0) < 1e-12)
+      {
+        error[i] = 1/error(i);
+      }
+    }
+    // Define zeros matrix
+
+    
+
+
+    tau_0 = Kp * Eigen::VectorXd::Zero(m_number_joints); // * error;
+    // tau_0 = Kp * error;
 
     // Compute joint accelerations according to: \f$ \ddot{q} = H^{-1} ( J^T f) \f$
-    m_current_accelerations.data = m_jnt_space_inertia.data.inverse() * m_jnt_jacobian.data.transpose() * net_force;
+    m_current_accelerations.data = m_jnt_space_inertia.data.inverse() * (m_jnt_jacobian.data.transpose() * net_force + tau_0);
+  
+  
+    i ++;
+    if (i % 10000 == 0)
+    {
+      std::cout <<"####################"<<std::endl;
+      std::cout <<"Kp: \n"<<Kp<<std::endl;
+      std::cout <<"reds: \n"<<activation_matrix * (m_postural_conf -  m_current_positions.data)<<std::endl;
+      std::cout << "tau_0: \n"
+                << tau_0 << std::endl;
+      std::cout << "error: \n"
+                << error << std::endl;
+      std::cout << "Tot torque:\n" << m_jnt_jacobian.data.transpose() * net_force + tau_0;
+      i = 0;
+ 
+    }
+
 
     // Numerical time integration with the Euler forward method
     m_current_positions.data = m_last_positions.data + m_last_velocities.data * period.seconds();
     m_current_velocities.data = m_last_velocities.data + m_current_accelerations.data * period.seconds();
-    m_current_velocities.data *= 0.9;  // 10 % global damping against unwanted null space motion.
-                                       // Will cause exponential slow-down without input.
+    m_current_velocities.data *= 0.9; // 10 % global damping against unwanted null space motion.
+                                      // Will cause exponential slow-down without input.
     // Make sure positions stay in allowed margins
     applyJointLimits();
 
@@ -122,15 +159,14 @@ namespace cartesian_controller_base{
     return control_cmd;
   }
 
-
 #if defined CARTESIAN_CONTROLLERS_HUMBLE || defined CARTESIAN_CONTROLLERS_IRON
   bool ForwardDynamicsSolver::init(std::shared_ptr<rclcpp_lifecycle::LifecycleNode> nh,
 #else
   bool ForwardDynamicsSolver::init(std::shared_ptr<rclcpp::Node> nh,
 #endif
-                                   const KDL::Chain& chain,
-                                   const KDL::JntArray& upper_pos_limits,
-                                   const KDL::JntArray& lower_pos_limits)
+                                   const KDL::Chain &chain,
+                                   const KDL::JntArray &upper_pos_limits,
+                                   const KDL::JntArray &lower_pos_limits)
   {
     IKSolver::init(nh, chain, upper_pos_limits, lower_pos_limits);
 
@@ -142,10 +178,16 @@ namespace cartesian_controller_base{
 
     // Forward dynamics
     m_jnt_jacobian_solver.reset(new KDL::ChainJntToJacSolver(m_chain));
-    m_jnt_space_inertia_solver.reset(new KDL::ChainDynParam(m_chain,KDL::Vector::Zero()));
+    m_jnt_space_inertia_solver.reset(new KDL::ChainDynParam(m_chain, KDL::Vector::Zero()));
     m_jnt_jacobian.resize(m_number_joints);
     m_jnt_space_inertia.resize(m_number_joints);
+    m_postural_joints.resize(m_number_joints);
 
+    m_postural_joints = Eigen::VectorXd::Zero(m_number_joints);
+    m_postural_conf = Eigen::VectorXd::Zero(m_number_joints);
+    m_postural_joints << 0.0, 0.0, 1, 0.0, 0.0, 0.0;
+    m_postural_conf << 0, 0, 0.0, 0, 0, 0;
+    m_post_kp = 0.01;
     // Set the initial value if provided at runtime, else use default value.
     m_min = nh->declare_parameter<double>(m_params + "/link_mass", 0.1);
 
@@ -167,18 +209,18 @@ namespace cartesian_controller_base{
         m_chain.segments[i].setInertia(
             KDL::RigidBodyInertia::Zero());
       }
-      else  // relatively moving segment
+      else // relatively moving segment
       {
         m_chain.segments[i].setInertia(
             KDL::RigidBodyInertia(
-              m_min,                // mass
-              KDL::Vector::Zero(),  // center of gravity
-              KDL::RotationalInertia(
-                ip_min,             // ixx
-                ip_min,             // iyy
-                ip_min              // izz
-                // ixy, ixy, iyz default to 0.0
-                )));
+                m_min,               // mass
+                KDL::Vector::Zero(), // center of gravity
+                KDL::RotationalInertia(
+                    ip_min, // ixx
+                    ip_min, // iyy
+                    ip_min  // izz
+                    // ixy, ixy, iyz default to 0.0
+                    )));
       }
     }
 
@@ -186,14 +228,13 @@ namespace cartesian_controller_base{
     // See https://arxiv.org/pdf/1908.06252.pdf for a motivation for this setting.
     double m = 1;
     double ip = 1;
-    m_chain.segments[m_chain.segments.size()-1].setInertia(
+    m_chain.segments[m_chain.segments.size() - 1].setInertia(
         KDL::RigidBodyInertia(
-          m,
-          KDL::Vector::Zero(),
-          KDL::RotationalInertia(ip, ip, ip)));
+            m,
+            KDL::Vector::Zero(),
+            KDL::RotationalInertia(ip, ip, ip)));
 
     return true;
   }
-
 
 } // namespace

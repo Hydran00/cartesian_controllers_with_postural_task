@@ -126,7 +126,12 @@ class ForwardDynamicsSolver : public IKSolver
     // Dynamic parameters
     std::shared_ptr<rclcpp::Node> m_handle; ///< handle for dynamic parameter interaction
     const std::string m_params = "solver/forward_dynamics"; ///< namespace for parameter access
+    Eigen::VectorXd m_postural_conf ; // robot position to avoid
+    Eigen::VectorXd m_postural_joints; // robot joints for which we have defined a task
 
+    double m_post_kp; // postural gain
+    double m_post_kd; // postural gain
+    int i=0;
     /**
      * Virtual link mass
      * Virtual mass of the manipulator's links. The smaller this value, the
