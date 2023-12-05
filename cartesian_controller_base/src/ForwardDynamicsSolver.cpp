@@ -87,49 +87,44 @@ namespace cartesian_controller_base
     // Compute joint jacobian
     m_jnt_jacobian_solver->JntToJac(m_current_positions, m_jnt_jacobian);
 
-    Eigen::VectorXd tau_0 = Eigen::VectorXd(m_number_joints);
+    // Eigen::VectorXd tau_0 = Eigen::VectorXd(m_number_joints);
     Eigen::MatrixXd activation_matrix = m_postural_joints.asDiagonal();
-    Eigen::MatrixXd Kp =  m_post_kp *  Eigen::MatrixXd::Identity(m_number_joints, m_number_joints);
+    // Eigen::MatrixXd Kp = m_post_kp * Eigen::MatrixXd::Identity(m_number_joints, m_number_joints);
     // std::cout<< (m_postural_conf(2) -  m_current_positions.data(2));
 
-    Eigen::VectorXd error = (activation_matrix * (m_postural_conf - m_current_positions.data).transpose() * (m_postural_conf - m_current_positions.data));
+    // Compute ddq0    INT ✘  12:29:16 
+    Eigen::VectorXd delta_q0 = -(m_postural_conf -  m_current_positions.data);
+  
 
-    // invert values
-    for (int i=0; i < m_number_joints; i++)
-    {
-      // check if joint i has a postural task
-      if (abs(activation_matrix(i,i) - 1.0) < 1e-12)
-      {
-        error[i] = 1/error(i);
-      }
-    }
-    // Define zeros matrix
+    // element-wise inversion (power of 3 to maintain sign)
+    delta_q0 = delta_q0.unaryExpr([](double x) -> double
+                                { if (abs(x) > 1e-5){return 1 / pow(x,3);}else{return 0;} });
 
-    
-
-
-    tau_0 = Kp * Eigen::VectorXd::Zero(m_number_joints); // * error;
-    // tau_0 = Kp * error;
+    Eigen::VectorXd ddq0 = m_post_kp * activation_matrix * delta_q0;
 
     // Compute joint accelerations according to: \f$ \ddot{q} = H^{-1} ( J^T f) \f$
-    m_current_accelerations.data = m_jnt_space_inertia.data.inverse() * (m_jnt_jacobian.data.transpose() * net_force + tau_0);
-  
-  
-    i ++;
+    m_current_accelerations.data = m_jnt_space_inertia.data.inverse() * m_jnt_jacobian.data.transpose() * net_force + ddq0;
+
+
+    i++;
     if (i % 10000 == 0)
     {
-      std::cout <<"####################"<<std::endl;
-      std::cout <<"Kp: \n"<<Kp<<std::endl;
-      std::cout <<"reds: \n"<<activation_matrix * (m_postural_conf -  m_current_positions.data)<<std::endl;
-      std::cout << "tau_0: \n"
-                << tau_0 << std::endl;
-      std::cout << "error: \n"
-                << error << std::endl;
-      std::cout << "Tot torque:\n" << m_jnt_jacobian.data.transpose() * net_force + tau_0;
-      i = 0;
- 
-    }
 
+      std::cout << "####################" << std::endl;
+      std::cout << "delta_q0: \n"
+                << delta_q0 << std::endl;
+      std::cout << "Acceleration 0: \n"
+          << ddq0 << std::endl;
+      // std::cout << "reds: \n"
+      //           << activation_matrix * (m_postural_conf - m_current_positions.data) << std::endl;
+      // std::cout << "tau_0: \n"
+      //           << tau_0 << std::endl;
+      // std::cout << "error: \n"
+      //           << error << std::endl;
+      std::cout << "Tot torque:\n"
+                << m_jnt_jacobian.data.transpose() * net_force;
+      i = 0;
+    }
 
     // Numerical time integration with the Euler forward method
     m_current_positions.data = m_last_positions.data + m_last_velocities.data * period.seconds();
@@ -187,7 +182,7 @@ namespace cartesian_controller_base
     m_postural_conf = Eigen::VectorXd::Zero(m_number_joints);
     m_postural_joints << 0.0, 0.0, 1, 0.0, 0.0, 0.0;
     m_postural_conf << 0, 0, 0.0, 0, 0, 0;
-    m_post_kp = 0.01;
+    m_post_kp = 0.1;
     // Set the initial value if provided at runtime, else use default value.
     m_min = nh->declare_parameter<double>(m_params + "/link_mass", 0.1);
 
