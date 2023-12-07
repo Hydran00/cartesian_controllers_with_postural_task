@@ -87,42 +87,67 @@ namespace cartesian_controller_base
     // Compute joint jacobian
     m_jnt_jacobian_solver->JntToJac(m_current_positions, m_jnt_jacobian);
 
-    // Eigen::VectorXd tau_0 = Eigen::VectorXd(m_number_joints);
+
     Eigen::MatrixXd activation_matrix = m_postural_joints.asDiagonal();
-    // Eigen::MatrixXd Kp = m_post_kp * Eigen::MatrixXd::Identity(m_number_joints, m_number_joints);
-    // std::cout<< (m_postural_conf(2) -  m_current_positions.data(2));
 
-    // Compute ddq0    INT ✘  12:29:16 
-    Eigen::VectorXd delta_q0 = -(m_postural_conf -  m_current_positions.data);
-  
+    Eigen::VectorXd delta_q0 = (m_current_positions.data - m_postural_conf);
 
-    // element-wise inversion (power of 3 to maintain sign)
+    // for (int i = 0; i < delta_q0.size(); ++i)
+    // {
+    //   if (abs(delta_q0[i]) > 0.0)
+    //   {
+    //     delta_q0[i] = (1 / (k_sigma * sqrt(2 * M_PI))) * exp(-0.5 * pow((delta_q0[i]) / k_sigma, 2.0));
+    //   }else{
+    //     delta_q0[i] = -(1 / (k_sigma * sqrt(2 * M_PI))) * exp(-0.5 * pow((delta_q0[i]) / k_sigma, 2.0));
+    //   }
+    // }
+
+    // stores signs of delta_q0 vector's elements
+    std::vector<bool> signs;
+
+    for (int i = 0; i < m_number_joints; ++i)
+    {
+      if (delta_q0[i] > 0)
+      {
+        signs.push_back(true);
+      }
+      else
+      {
+        signs.push_back(true);
+      }
+    }
+
+    // computes element-wise inversion (power of 3 to maintain sign)
     delta_q0 = delta_q0.unaryExpr([](double x) -> double
-                                { if (abs(x) > 1e-5){return 1 / pow(x,3);}else{return 0;} });
+                                  { if (abs(x) > 1e-12){return 1 / pow(x,6);}else{return 0;} });
+    // applies sigmoid
+    delta_q0 = delta_q0.unaryExpr([](double x) -> double
+                                  { return 1 / (1 + exp(-x));});
 
-    Eigen::VectorXd ddq0 = m_post_kp * activation_matrix * delta_q0;
+    // applies sign
+    for (int i = 0; i < m_number_joints; ++i)
+    {
+      if (!signs[i])
+      {
+        delta_q0[i] = - delta_q0(i);
+      }
+    }
 
-    // Compute joint accelerations according to: \f$ \ddot{q} = H^{-1} ( J^T f) \f$
+    // computes acceleration related to postural task
+    Eigen::VectorXd ddq0 = k_m_post_kp * activation_matrix * delta_q0;
+
+    // Computes the joint accelerations according to: \f$ \ddot{q} = H^{-1} ( J^T f) \f$
     m_current_accelerations.data = m_jnt_space_inertia.data.inverse() * m_jnt_jacobian.data.transpose() * net_force + ddq0;
 
-
     i++;
-    if (i % 10000 == 0)
+    if (i % 5000 == 0)
     {
 
       std::cout << "####################" << std::endl;
       std::cout << "delta_q0: \n"
                 << delta_q0 << std::endl;
       std::cout << "Acceleration 0: \n"
-          << ddq0 << std::endl;
-      // std::cout << "reds: \n"
-      //           << activation_matrix * (m_postural_conf - m_current_positions.data) << std::endl;
-      // std::cout << "tau_0: \n"
-      //           << tau_0 << std::endl;
-      // std::cout << "error: \n"
-      //           << error << std::endl;
-      std::cout << "Tot torque:\n"
-                << m_jnt_jacobian.data.transpose() * net_force;
+                << ddq0 << std::endl;
       i = 0;
     }
 
@@ -180,9 +205,9 @@ namespace cartesian_controller_base
 
     m_postural_joints = Eigen::VectorXd::Zero(m_number_joints);
     m_postural_conf = Eigen::VectorXd::Zero(m_number_joints);
-    m_postural_joints << 0.0, 0.0, 1, 0.0, 0.0, 0.0;
+    m_postural_joints << 0.0, 0.0, 1.0, 0.0, 0.0, 0.0;
     m_postural_conf << 0, 0, 0.0, 0, 0, 0;
-    m_post_kp = 0.1;
+
     // Set the initial value if provided at runtime, else use default value.
     m_min = nh->declare_parameter<double>(m_params + "/link_mass", 0.1);
 
