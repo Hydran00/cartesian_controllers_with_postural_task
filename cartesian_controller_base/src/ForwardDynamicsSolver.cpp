@@ -87,67 +87,56 @@ namespace cartesian_controller_base
     // Compute joint jacobian
     m_jnt_jacobian_solver->JntToJac(m_current_positions, m_jnt_jacobian);
 
+    //////////Compute postural task///////////////////////////////////////////
 
     Eigen::MatrixXd activation_matrix = m_postural_joints.asDiagonal();
-
     Eigen::VectorXd delta_q0 = (m_current_positions.data - m_postural_conf);
 
-    // for (int i = 0; i < delta_q0.size(); ++i)
-    // {
-    //   if (abs(delta_q0[i]) > 0.0)
-    //   {
-    //     delta_q0[i] = (1 / (k_sigma * sqrt(2 * M_PI))) * exp(-0.5 * pow((delta_q0[i]) / k_sigma, 2.0));
-    //   }else{
-    //     delta_q0[i] = -(1 / (k_sigma * sqrt(2 * M_PI))) * exp(-0.5 * pow((delta_q0[i]) / k_sigma, 2.0));
-    //   }
-    // }
-
-    // stores signs of delta_q0 vector's elements
-    std::vector<bool> signs;
-
-    for (int i = 0; i < m_number_joints; ++i)
-    {
-      if (delta_q0[i] > 0)
-      {
-        signs.push_back(true);
-      }
-      else
-      {
-        signs.push_back(true);
-      }
-    }
-
-    // // computes element-wise inversion (power of 3 to maintain sign)
-    // delta_q0 = delta_q0.unaryExpr([](double x) -> double
-    //                               { if (abs(x) > 1e-12){return 1 / pow(x,6);}else{return 0;} });
     // applies sigmoid
-    delta_q0 = delta_q0.unaryExpr([](double x) -> double
-                                  { return 1 / (1 + exp(100* (x-cd0.05)));});
+    Eigen::VectorXd q0_task_position = delta_q0.unaryExpr([](double x) -> double
+                                                          { return 1 / (1 + exp(100 * (x - 0.05))); });
 
-    // applies sign
-    // for (int i = 0; i < m_number_joints; ++i)
-    // {
-    //   if (!signs[i])
-    //   {
-    //     delta_q0[i] = - delta_q0(i);
-    //   }
-    // }
+    // check for division by zero
+    Eigen::VectorXd q0_task_velocity = (delta_q0 - m_last_delta_q0) * (abs(period.seconds() - 0.0) < 1e-9 ? 0.0 : 1 / period.seconds());
 
     // computes acceleration related to postural task
-    Eigen::VectorXd ddq0 = k_m_post_kp * activation_matrix * delta_q0;
+    Eigen::VectorXd ddq0 = k_m_post_kp * activation_matrix * q0_task_position +
+                           k_m_post_kd * activation_matrix * q0_task_velocity;
 
+    //////////////////////////////////////////////////////////////////////////
+    Eigen::VectorXd acc = m_jnt_space_inertia.data.inverse() * m_jnt_jacobian.data.transpose() * net_force;
+    for (int i = 0; i < 6; i++)
+    {
+      if (activation_matrix(i, i) * q0_task_position(i) > 0.001)
+      {
+        acc = Eigen::VectorXd::Zero(6);
+        break;
+      }
+    }
     // Computes the joint accelerations according to: \f$ \ddot{q} = H^{-1} ( J^T f) \f$
-    m_current_accelerations.data = m_jnt_space_inertia.data.inverse() * m_jnt_jacobian.data.transpose() * net_force+ ddq0;
+    // m_current_accelerations.data = m_jnt_space_inertia.data.inverse() * m_jnt_jacobian.data.transpose() * net_force + ddq0;
+    m_current_accelerations.data = acc + ddq0;
 
     i++;
-    if (i % 5000 == 0)
+    if (i % 2000 == 0)
     {
 
       std::cout << "####################" << std::endl;
       std::cout << "delta_q0: \n"
                 << delta_q0 << std::endl;
-      std::cout << "Acceleration 0: \n"
-                << ddq0 << std::endl;
+      std::cout << "q0_task_position: \n"
+                << activation_matrix * q0_task_position << std::endl;
+      // std::cout << "THRESHOLD: \n"
+      // << (q0_task_position(i) < 0.1 ? 1.0 : (1 - q0_task_position(i)))<< std::endl;;
+      std::cout << "ACc\n"
+                << acc << std::endl;
+      // std::cout << "delta_q0_dot: \n"
+      //           << delta_q0 - m_last_delta_q0 << std::endl;
+      // std::cout << "m_last_delta_q0: \n"
+      //           << m_last_delta_q0 << std::endl;
+      // std::cout << "Acceleration 0: \n"
+      //           << ddq0 << std::endl;
+      // std::cout << "DeltaTime: " << period.seconds() << std::endl;
       i = 0;
     }
 
@@ -175,6 +164,8 @@ namespace cartesian_controller_base
     // Update for the next cycle
     m_last_positions = m_current_positions;
     m_last_velocities = m_current_velocities;
+
+    m_last_delta_q0 = delta_q0;
 
     return control_cmd;
   }
@@ -207,6 +198,10 @@ namespace cartesian_controller_base
     m_postural_conf = Eigen::VectorXd::Zero(m_number_joints);
     m_postural_joints << 0.0, 0.0, 1.0, 0.0, 0.0, 0.0;
     m_postural_conf << 0, 0, 0.0, 0, 0, 0;
+    m_last_delta_q0 = Eigen::VectorXd::Zero(m_number_joints);
+    m_last_delta_q0 << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+    std::cout << "m_postural_joints: \n"
+              << m_last_delta_q0 << std::endl;
 
     // Set the initial value if provided at runtime, else use default value.
     m_min = nh->declare_parameter<double>(m_params + "/link_mass", 0.1);
