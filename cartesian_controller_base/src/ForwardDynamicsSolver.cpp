@@ -117,27 +117,27 @@ namespace cartesian_controller_base
       }
     }
 
-    // computes element-wise inversion (power of 3 to maintain sign)
-    delta_q0 = delta_q0.unaryExpr([](double x) -> double
-                                  { if (abs(x) > 1e-12){return 1 / pow(x,6);}else{return 0;} });
+    // // computes element-wise inversion (power of 3 to maintain sign)
+    // delta_q0 = delta_q0.unaryExpr([](double x) -> double
+    //                               { if (abs(x) > 1e-12){return 1 / pow(x,6);}else{return 0;} });
     // applies sigmoid
     delta_q0 = delta_q0.unaryExpr([](double x) -> double
-                                  { return 1 / (1 + exp(-x));});
+                                  { return 1 / (1 + exp(100* (x-cd0.05)));});
 
     // applies sign
-    for (int i = 0; i < m_number_joints; ++i)
-    {
-      if (!signs[i])
-      {
-        delta_q0[i] = - delta_q0(i);
-      }
-    }
+    // for (int i = 0; i < m_number_joints; ++i)
+    // {
+    //   if (!signs[i])
+    //   {
+    //     delta_q0[i] = - delta_q0(i);
+    //   }
+    // }
 
     // computes acceleration related to postural task
     Eigen::VectorXd ddq0 = k_m_post_kp * activation_matrix * delta_q0;
 
     // Computes the joint accelerations according to: \f$ \ddot{q} = H^{-1} ( J^T f) \f$
-    m_current_accelerations.data = m_jnt_space_inertia.data.inverse() * m_jnt_jacobian.data.transpose() * net_force + ddq0;
+    m_current_accelerations.data = m_jnt_space_inertia.data.inverse() * m_jnt_jacobian.data.transpose() * net_force+ ddq0;
 
     i++;
     if (i % 5000 == 0)

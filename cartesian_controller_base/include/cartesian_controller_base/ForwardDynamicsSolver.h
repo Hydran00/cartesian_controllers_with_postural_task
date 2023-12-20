@@ -129,7 +129,7 @@ class ForwardDynamicsSolver : public IKSolver
     Eigen::VectorXd m_postural_conf ; // robot position to avoid
     Eigen::VectorXd m_postural_joints; // robot joints for which we have defined a task
 
-    const double k_m_post_kp = 0.5; // postural gain
+    const double k_m_post_kp = 1; // postural gain
     const double k_m_post_kd = 0.0; // postural gain
     const double k_sigma = 0.2;
     int i = 0;

@@ -227,7 +227,7 @@ namespace cartesian_controller_base
         lower_pos_limits(i) = robot_model.getJoint(m_joint_names[i])->limits->lower;
       }
     }
-
+    // lower_pos_limits(2) = 0.0;
     // Initialize solvers
     m_ik_solver->init(get_node(), m_robot_chain, upper_pos_limits, lower_pos_limits);
     KDL::Tree tmp("not_relevant");
