@@ -145,4 +145,16 @@ ament_export_libraries(
   ${PROJECT_NAME} ik_solvers
 )
 
+# Set the path to the qpOASES library and headers
+set(QPOASES_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib)
+set(QPOASES_INCLUDE_DIR ${QPOASES_LIB_DIR}/include/cartesian_controller_base)
+
+# Add the qpOASES library to the project
+add_library(qpOASES STATIC IMPORTED)
+set_target_properties(qpOASES PROPERTIES IMPORTED_LOCATION ${QPOASES_LIB_DIR}/libqpOASES.a)
+
+# Add the qpOASES include directory to the project
+include_directories(${QPOASES_INCLUDE_DIR})
+
+
 ament_package()

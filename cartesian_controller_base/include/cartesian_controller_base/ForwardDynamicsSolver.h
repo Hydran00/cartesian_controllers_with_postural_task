@@ -53,6 +53,7 @@
 #include <kdl/jacobian.hpp>
 #include <memory>
 #include <vector>
+#include <cartesian_controller_base/qpOASES.hpp>
 
 namespace cartesian_controller_base{
 

@@ -89,6 +89,44 @@ namespace cartesian_controller_base
 
     //////////Compute postural task///////////////////////////////////////////
 
+    USING_NAMESPACE_QPOASES
+    /* Setup data of first QP. */
+    // real_t H[3 * 3] =
+    //     {
+    //         m_R_matrix(0) + m_Q_matrix(0) * Base::m_joint_positions(0), 0.0, 0.0,
+    //         0.0, m_R_matrix(1) + m_Q_matrix(1) * Base::m_joint_positions(1), 0.0,
+    //         0.0, 0.0, m_R_matrix(2) + m_Q_matrix(2) * Base::m_joint_positions(2)};
+    // real_t A[3 * 3] =
+    //     {
+    //         Base::m_joint_positions(0), 0.0, 0.0,
+    //         0.0, Base::m_joint_positions(1), 0.0,
+    //         0.0, 0.0, Base::m_joint_positions(2)};
+    // real_t g[3] = {
+    //     -2 * m_stiffness_min(0) * m_R_matrix(0) - 2 * ImpedanceBase::m_target_wrench(0) * Base::m_joint_positions(0) * m_Q_matrix(0) + 2 * m_Q_matrix(0) * ImpedanceBase::m_cartesian_damping(0, 0) * Base::m_joint_velocities(0) * Base::m_joint_positions(0),
+    //     -2 * m_stiffness_min(1) * m_R_matrix(1) - 2 * ImpedanceBase::m_target_wrench(1) * Base::m_joint_positions(1) * m_Q_matrix(1) + 2 * m_Q_matrix(1) * ImpedanceBase::m_cartesian_damping(1, 1) * Base::m_joint_velocities(1) * Base::m_joint_positions(1),
+    //     -2 * m_stiffness_min(2) * m_R_matrix(2) - 2 * ImpedanceBase::m_target_wrench(2) * Base::m_joint_positions(2) * m_Q_matrix(2) + 2 * m_Q_matrix(2) * ImpedanceBase::m_cartesian_damping(2, 2) * Base::m_joint_velocities(2) * Base::m_joint_positions(2)};
+    real_t lb[3] = {ddq_min(0), ddq_min(1), ddq_min(2),ddq_min(3), ddq_min(4), ddq_min(5)};
+    real_t ub[3] = {m_stiffness_max(0), m_stiffness_max(1), m_stiffness_max(2)};
+    // real_t lbA[3] = {0.0, 0.0, 0.0};
+    // real_t ubA[3] = {
+    //     m_force_max(0) - ImpedanceBase::m_cartesian_damping(0, 0) * Base::m_joint_velocities(0),
+    //     m_force_max(1) - ImpedanceBase::m_cartesian_damping(1, 1) * Base::m_joint_velocities(1),
+    //     m_force_max(2) - ImpedanceBase::m_cartesian_damping(2, 2) * Base::m_joint_velocities(2)};
+
+    /* Setting up QProblem object. */
+    QProblem min_problem(3, 3);
+
+    /* Solve QP. */
+    // int nWSR = 10;
+    // min_problem.init(H, g, A, lb, ub, lbA, ubA, nWSR);
+
+    // real_t xOpt[3];
+    // min_problem.getPrimalSolution(xOpt);
+
+    // ImpedanceBase::m_cartesian_stiffness(0, 0) = xOpt[0];
+    // ImpedanceBase::m_cartesian_stiffness(1, 1) = xOpt[1];
+    // ImpedanceBase::m_cartesian_stiffness(2, 2) = xOpt[2];
+
     Eigen::MatrixXd activation_matrix = m_postural_joints.asDiagonal();
     Eigen::VectorXd delta_q0 = (m_current_positions.data - m_postural_conf);
 
