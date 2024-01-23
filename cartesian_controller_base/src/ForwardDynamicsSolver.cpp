@@ -88,95 +88,70 @@ namespace cartesian_controller_base
     m_jnt_jacobian_solver->JntToJac(m_current_positions, m_jnt_jacobian);
 
     //////////Compute postural task///////////////////////////////////////////
+    Eigen::MatrixXd J = m_jnt_jacobian.data;
 
     USING_NAMESPACE_QPOASES
     /* Setup data of first QP. */
-    // real_t H[3 * 3] =
-    //     {
-    //         m_R_matrix(0) + m_Q_matrix(0) * Base::m_joint_positions(0), 0.0, 0.0,
-    //         0.0, m_R_matrix(1) + m_Q_matrix(1) * Base::m_joint_positions(1), 0.0,
-    //         0.0, 0.0, m_R_matrix(2) + m_Q_matrix(2) * Base::m_joint_positions(2)};
-    // real_t A[3 * 3] =
-    //     {
-    //         Base::m_joint_positions(0), 0.0, 0.0,
-    //         0.0, Base::m_joint_positions(1), 0.0,
-    //         0.0, 0.0, Base::m_joint_positions(2)};
-    // real_t g[3] = {
-    //     -2 * m_stiffness_min(0) * m_R_matrix(0) - 2 * ImpedanceBase::m_target_wrench(0) * Base::m_joint_positions(0) * m_Q_matrix(0) + 2 * m_Q_matrix(0) * ImpedanceBase::m_cartesian_damping(0, 0) * Base::m_joint_velocities(0) * Base::m_joint_positions(0),
-    //     -2 * m_stiffness_min(1) * m_R_matrix(1) - 2 * ImpedanceBase::m_target_wrench(1) * Base::m_joint_positions(1) * m_Q_matrix(1) + 2 * m_Q_matrix(1) * ImpedanceBase::m_cartesian_damping(1, 1) * Base::m_joint_velocities(1) * Base::m_joint_positions(1),
-    //     -2 * m_stiffness_min(2) * m_R_matrix(2) - 2 * ImpedanceBase::m_target_wrench(2) * Base::m_joint_positions(2) * m_Q_matrix(2) + 2 * m_Q_matrix(2) * ImpedanceBase::m_cartesian_damping(2, 2) * Base::m_joint_velocities(2) * Base::m_joint_positions(2)};
-    real_t lb[3] = {ddq_min(0), ddq_min(1), ddq_min(2),ddq_min(3), ddq_min(4), ddq_min(5)};
-    real_t ub[3] = {m_stiffness_max(0), m_stiffness_max(1), m_stiffness_max(2)};
-    // real_t lbA[3] = {0.0, 0.0, 0.0};
-    // real_t ubA[3] = {
-    //     m_force_max(0) - ImpedanceBase::m_cartesian_damping(0, 0) * Base::m_joint_velocities(0),
-    //     m_force_max(1) - ImpedanceBase::m_cartesian_damping(1, 1) * Base::m_joint_velocities(1),
-    //     m_force_max(2) - ImpedanceBase::m_cartesian_damping(2, 2) * Base::m_joint_velocities(2)};
+ 
+// [         J1_1^2 + J2_1^2 + J3_1^2, J1_1*J1_2 + J2_1*J2_2 + J3_1*J3_2, J1_1*J1_3 + J2_1*J2_3 + J3_1*J3_3, J1_1*J1_4 + J2_1*J2_4 + J3_1*J3_4, J1_1*J1_5 + J2_1*J2_5 + J3_1*J3_5, J1_1*J1_6 + J2_1*J2_6 + J3_1*J3_6]
+// [J1_1*J1_2 + J2_1*J2_2 + J3_1*J3_2,          J1_2^2 + J2_2^2 + J3_2^2, J1_2*J1_3 + J2_2*J2_3 + J3_2*J3_3, J1_2*J1_4 + J2_2*J2_4 + J3_2*J3_4, J1_2*J1_5 + J2_2*J2_5 + J3_2*J3_5, J1_2*J1_6 + J2_2*J2_6 + J3_2*J3_6]
+// [J1_1*J1_3 + J2_1*J2_3 + J3_1*J3_3, J1_2*J1_3 + J2_2*J2_3 + J3_2*J3_3,          J1_3^2 + J2_3^2 + J3_3^2, J1_3*J1_4 + J2_3*J2_4 + J3_3*J3_4, J1_3*J1_5 + J2_3*J2_5 + J3_3*J3_5, J1_3*J1_6 + J2_3*J2_6 + J3_3*J3_6]
+// [J1_1*J1_4 + J2_1*J2_4 + J3_1*J3_4, J1_2*J1_4 + J2_2*J2_4 + J3_2*J3_4, J1_3*J1_4 + J2_3*J2_4 + J3_3*J3_4,          J1_4^2 + J2_4^2 + J3_4^2, J1_4*J1_5 + J2_4*J2_5 + J3_4*J3_5, J1_4*J1_6 + J2_4*J2_6 + J3_4*J3_6]
+// [J1_1*J1_5 + J2_1*J2_5 + J3_1*J3_5, J1_2*J1_5 + J2_2*J2_5 + J3_2*J3_5, J1_3*J1_5 + J2_3*J2_5 + J3_3*J3_5, J1_4*J1_5 + J2_4*J2_5 + J3_4*J3_5,          J1_5^2 + J2_5^2 + J3_5^2, J1_5*J1_6 + J2_5*J2_6 + J3_5*J3_6]
+// [J1_1*J1_6 + J2_1*J2_6 + J3_1*J3_6, J1_2*J1_6 + J2_2*J2_6 + J3_2*J3_6, J1_3*J1_6 + J2_3*J2_6 + J3_3*J3_6, J1_4*J1_6 + J2_4*J2_6 + J3_4*J3_6, J1_5*J1_6 + J2_5*J2_6 + J3_5*J3_6,          J1_6^2 + J2_6^2 + J3_6^2]
+    real_t H[6 * 6] = {
+      pow(J(0,0),2) + pow(J(1,0),2) + pow(J(2,0),2), J(0,0)*J(0,1) + J(1,0)*J(1,1) + J(2,0)*J(2,1), J(0,0)*J(0,2) + J(1,0)*J(1,2) + J(2,0)*J(2,2), J(0,0)*J(0,3) + J(1,0)*J(1,3) + J(2,0)*J(2,3), J(0,0)*J(0,4) + J(1,0)*J(1,4) + J(2,0)*J(2,4), J(0,0)*J(0,5) + J(1,0)*J(1,5) + J(2,0)*J(2,5),
+      J(0,0)*J(0,1) + J(1,0)*J(1,1) + J(2,0)*J(2,1), pow(J(0,1),2) + pow(J(1,1),2) + pow(J(2,1),2), J(0,1)*J(0,2) + J(1,1)*J(1,2) + J(2,1)*J(2,2), J(0,1)*J(0,3) + J(1,1)*J(1,3) + J(2,1)*J(2,3), J(0,1)*J(0,4) + J(1,1)*J(1,4) + J(2,1)*J(2,4), J(0,1)*J(0,5) + J(1,1)*J(1,5) + J(2,1)*J(2,5),
+      J(0,0)*J(0,2) + J(1,0)*J(1,2) + J(2,0)*J(2,2), J(0,1)*J(0,2) + J(1,1)*J(1,2) + J(2,1)*J(2,2), pow(J(0,2),2) + pow(J(1,2),2) + pow(J(2,2),2), J(0,2)*J(0,3) + J(1,2)*J(1,3) + J(2,2)*J(2,3), J(0,2)*J(0,4) + J(1,2)*J(1,4) + J(2,2)*J(2,4), J(0,2)*J(0,5) + J(1,2)*J(1,5) + J(2,2)*J(2,5),
+      J(0,0)*J(0,3) + J(1,0)*J(1,3) + J(2,0)*J(2,3), J(0,1)*J(0,3) + J(1,1)*J(1,3) + J(2,1)*J(2,3), J(0,2)*J(0,3) + J(1,2)*J(1,3) + J(2,2)*J(2,3), pow(J(0,3),2) + pow(J(1,3),2) + pow(J(2,3),2), J(0,3)*J(0,4) + J(1,3)*J(1,4) + J(2,3)*J(2,4), J(0,3)*J(0,5) + J(1,3)*J(1,5) + J(2,3)*J(2,5),
+      J(0,0)*J(0,4) + J(1,0)*J(1,4) + J(2,0)*J(2,4), J(0,1)*J(0,4) + J(1,1)*J(1,4) + J(2,1)*J(2,4), J(0,2)*J(0,4) + J(1,2)*J(1,4) + J(2,2)*J(2,4), J(0,3)*J(0,4) + J(1,3)*J(1,4) + J(2,3)*J(2,4), pow(J(0,4),2) + pow(J(1,4),2) + pow(J(2,4),2), J(0,4)*J(0,5) + J(1,4)*J(1,5) + J(2,4)*J(2,5),
+      J(0,0)*J(0,5) + J(1,0)*J(1,5) + J(2,0)*J(2,5), J(0,1)*J(0,5) + J(1,1)*J(1,5) + J(2,1)*J(2,5), J(0,2)*J(0,5) + J(1,2)*J(1,5) + J(2,2)*J(2,5), J(0,3)*J(0,5) + J(1,3)*J(1,5) + J(2,3)*J(2,5), J(0,4)*J(0,5) + J(1,4)*J(1,5) + J(2,4)*J(2,5), pow(J(0,5),2) + pow(J(1,5),2) + pow(J(2,5),2)
+    };
+    Eigen::MatrixXd ddq = m_current_accelerations;
+    Eigen::MatrixXd ddx = 
+    // J1_1*(J1_1*ddq_0 - ddx_x + J1_2*ddq_1 + J1_3*ddq_2 + J1_4*ddq_3 + J1_5*ddq_4 + J1_6*ddq_5 + dJ1_1*dq_0 + dJ1_2*dq_1 + dJ1_3*dq_2 + dJ1_4*dq_3 + dJ1_5*dq_4 + dJ1_6*dq_5) + J2_1*(J2_1*ddq_0 - ddx_y + J2_2*ddq_1 + J2_3*ddq_2 + J2_4*ddq_3 + J2_5*ddq_4 + J2_6*ddq_5 + dJ2_1*dq_0 + dJ2_2*dq_1 + dJ2_3*dq_2 + dJ2_4*dq_3 + dJ2_5*dq_4 + dJ2_6*dq_5) + J3_1*(J3_1*ddq_0 - ddx_z + J3_2*ddq_1 + J3_3*ddq_2 + J3_4*ddq_3 + J3_5*ddq_4 + J3_6*ddq_5 + dJ3_1*dq_0 + dJ3_2*dq_1 + dJ3_3*dq_2 + dJ3_4*dq_3 + dJ3_5*dq_4 + dJ3_6*dq_5)
+    // J1_2*(J1_1*ddq_0 - ddx_x + J1_2*ddq_1 + J1_3*ddq_2 + J1_4*ddq_3 + J1_5*ddq_4 + J1_6*ddq_5 + dJ1_1*dq_0 + dJ1_2*dq_1 + dJ1_3*dq_2 + dJ1_4*dq_3 + dJ1_5*dq_4 + dJ1_6*dq_5) + J2_2*(J2_1*ddq_0 - ddx_y + J2_2*ddq_1 + J2_3*ddq_2 + J2_4*ddq_3 + J2_5*ddq_4 + J2_6*ddq_5 + dJ2_1*dq_0 + dJ2_2*dq_1 + dJ2_3*dq_2 + dJ2_4*dq_3 + dJ2_5*dq_4 + dJ2_6*dq_5) + J3_2*(J3_1*ddq_0 - ddx_z + J3_2*ddq_1 + J3_3*ddq_2 + J3_4*ddq_3 + J3_5*ddq_4 + J3_6*ddq_5 + dJ3_1*dq_0 + dJ3_2*dq_1 + dJ3_3*dq_2 + dJ3_4*dq_3 + dJ3_5*dq_4 + dJ3_6*dq_5)
+    // J1_3*(J1_1*ddq_0 - ddx_x + J1_2*ddq_1 + J1_3*ddq_2 + J1_4*ddq_3 + J1_5*ddq_4 + J1_6*ddq_5 + dJ1_1*dq_0 + dJ1_2*dq_1 + dJ1_3*dq_2 + dJ1_4*dq_3 + dJ1_5*dq_4 + dJ1_6*dq_5) + J2_3*(J2_1*ddq_0 - ddx_y + J2_2*ddq_1 + J2_3*ddq_2 + J2_4*ddq_3 + J2_5*ddq_4 + J2_6*ddq_5 + dJ2_1*dq_0 + dJ2_2*dq_1 + dJ2_3*dq_2 + dJ2_4*dq_3 + dJ2_5*dq_4 + dJ2_6*dq_5) + J3_3*(J3_1*ddq_0 - ddx_z + J3_2*ddq_1 + J3_3*ddq_2 + J3_4*ddq_3 + J3_5*ddq_4 + J3_6*ddq_5 + dJ3_1*dq_0 + dJ3_2*dq_1 + dJ3_3*dq_2 + dJ3_4*dq_3 + dJ3_5*dq_4 + dJ3_6*dq_5)
+    // J1_4*(J1_1*ddq_0 - ddx_x + J1_2*ddq_1 + J1_3*ddq_2 + J1_4*ddq_3 + J1_5*ddq_4 + J1_6*ddq_5 + dJ1_1*dq_0 + dJ1_2*dq_1 + dJ1_3*dq_2 + dJ1_4*dq_3 + dJ1_5*dq_4 + dJ1_6*dq_5) + J2_4*(J2_1*ddq_0 - ddx_y + J2_2*ddq_1 + J2_3*ddq_2 + J2_4*ddq_3 + J2_5*ddq_4 + J2_6*ddq_5 + dJ2_1*dq_0 + dJ2_2*dq_1 + dJ2_3*dq_2 + dJ2_4*dq_3 + dJ2_5*dq_4 + dJ2_6*dq_5) + J3_4*(J3_1*ddq_0 - ddx_z + J3_2*ddq_1 + J3_3*ddq_2 + J3_4*ddq_3 + J3_5*ddq_4 + J3_6*ddq_5 + dJ3_1*dq_0 + dJ3_2*dq_1 + dJ3_3*dq_2 + dJ3_4*dq_3 + dJ3_5*dq_4 + dJ3_6*dq_5)
+    // J1_5*(J1_1*ddq_0 - ddx_x + J1_2*ddq_1 + J1_3*ddq_2 + J1_4*ddq_3 + J1_5*ddq_4 + J1_6*ddq_5 + dJ1_1*dq_0 + dJ1_2*dq_1 + dJ1_3*dq_2 + dJ1_4*dq_3 + dJ1_5*dq_4 + dJ1_6*dq_5) + J2_5*(J2_1*ddq_0 - ddx_y + J2_2*ddq_1 + J2_3*ddq_2 + J2_4*ddq_3 + J2_5*ddq_4 + J2_6*ddq_5 + dJ2_1*dq_0 + dJ2_2*dq_1 + dJ2_3*dq_2 + dJ2_4*dq_3 + dJ2_5*dq_4 + dJ2_6*dq_5) + J3_5*(J3_1*ddq_0 - ddx_z + J3_2*ddq_1 + J3_3*ddq_2 + J3_4*ddq_3 + J3_5*ddq_4 + J3_6*ddq_5 + dJ3_1*dq_0 + dJ3_2*dq_1 + dJ3_3*dq_2 + dJ3_4*dq_3 + dJ3_5*dq_4 + dJ3_6*dq_5)
+    // J1_6*(J1_1*ddq_0 - ddx_x + J1_2*ddq_1 + J1_3*ddq_2 + J1_4*ddq_3 + J1_5*ddq_4 + J1_6*ddq_5 + dJ1_1*dq_0 + dJ1_2*dq_1 + dJ1_3*dq_2 + dJ1_4*dq_3 + dJ1_5*dq_4 + dJ1_6*dq_5) + J2_6*(J2_1*ddq_0 - ddx_y + J2_2*ddq_1 + J2_3*ddq_2 + J2_4*ddq_3 + J2_5*ddq_4 + J2_6*ddq_5 + dJ2_1*dq_0 + dJ2_2*dq_1 + dJ2_3*dq_2 + dJ2_4*dq_3 + dJ2_5*dq_4 + dJ2_6*dq_5) + J3_6*(J3_1*ddq_0 - ddx_z + J3_2*ddq_1 + J3_3*ddq_2 + J3_4*ddq_3 + J3_5*ddq_4 + J3_6*ddq_5 + dJ3_1*dq_0 + dJ3_2*dq_1 + dJ3_3*dq_2 + dJ3_4*dq_3 + dJ3_5*dq_4 + dJ3_6*dq_5)
+
+    real_t g[6]{
+      J(0,0)*
+    }
+    Eigen::VectorXd ddq_min = Eigen::VectorXd::Zero(6);
+    ddq_min << -0.1, -0.1, -0.1, -0.1, -0.1, -0.1;
+    Eigen::VectorXd ddq_max = Eigen::VectorXd::Zero(6);
+    ddq_max << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1;
+    real_t lb_ddq[6] = {ddq_min(0), ddq_min(1), ddq_min(2), ddq_min(3), ddq_min(4), ddq_min(5)};
+    real_t ub_ddq[6] = {ddq_max(0), ddq_max(1), ddq_max(2), ddq_max(3), ddq_max(4), ddq_max(5)};
+    // Imposing dynamics M ddq = J^T f -> ddq = M^-1 J^T f
+    Eigen::MatrixXd dyn_constraint = m_jnt_space_inertia.data.inverse() * m_jnt_jacobian.data.transpose() * net_force;
+    real_t lb_A[6] = {dyn_constraint[0], dyn_constraint[1], dyn_constraint[2], dyn_constraint[3], dyn_constraint[4], dyn_constraint[5]};
+    real_t ub_A[6] = {dyn_constraint[0], dyn_constraint[1], dyn_constraint[2], dyn_constraint[3], dyn_constraint[4], dyn_constraint[5]};
 
     /* Setting up QProblem object. */
-    QProblem min_problem(3, 3);
+    QProblem min_problem(6, 3);
 
     /* Solve QP. */
-    // int nWSR = 10;
-    // min_problem.init(H, g, A, lb, ub, lbA, ubA, nWSR);
+    int nWSR = 10;
+    min_problem.init(H, g, A, lb, ub, lbA, ubA, nWSR);
 
     // real_t xOpt[3];
     // min_problem.getPrimalSolution(xOpt);
 
-    // ImpedanceBase::m_cartesian_stiffness(0, 0) = xOpt[0];
+    // ImpedanceBase::m_cartesian_stiffness(0, 0) = xOpt(0);
     // ImpedanceBase::m_cartesian_stiffness(1, 1) = xOpt[1];
     // ImpedanceBase::m_cartesian_stiffness(2, 2) = xOpt[2];
 
-    Eigen::MatrixXd activation_matrix = m_postural_joints.asDiagonal();
-    Eigen::VectorXd delta_q0 = (m_current_positions.data - m_postural_conf);
-
-    // applies sigmoid
-    Eigen::VectorXd q0_task_position = delta_q0.unaryExpr([](double x) -> double
-                                                          { return 1 / (1 + exp(100 * (x - 0.05))); });
-
-    // check for division by zero
-    Eigen::VectorXd q0_task_velocity = (delta_q0 - m_last_delta_q0) * (abs(period.seconds() - 0.0) < 1e-9 ? 0.0 : 1 / period.seconds());
-
-    // computes acceleration related to postural task
-    Eigen::VectorXd ddq0 = k_m_post_kp * activation_matrix * q0_task_position +
-                           k_m_post_kd * activation_matrix * q0_task_velocity;
 
     //////////////////////////////////////////////////////////////////////////
-    Eigen::VectorXd acc = m_jnt_space_inertia.data.inverse() * m_jnt_jacobian.data.transpose() * net_force;
-    for (int i = 0; i < 6; i++)
-    {
-      if (activation_matrix(i, i) * q0_task_position(i) > 0.001)
-      {
-        acc = Eigen::VectorXd::Zero(6);
-        break;
-      }
-    }
+
     // Computes the joint accelerations according to: \f$ \ddot{q} = H^{-1} ( J^T f) \f$
     // m_current_accelerations.data = m_jnt_space_inertia.data.inverse() * m_jnt_jacobian.data.transpose() * net_force + ddq0;
-    m_current_accelerations.data = acc + ddq0;
-
-    i++;
-    if (i % 2000 == 0)
-    {
-
-      std::cout << "####################" << std::endl;
-      std::cout << "delta_q0: \n"
-                << delta_q0 << std::endl;
-      std::cout << "q0_task_position: \n"
-                << activation_matrix * q0_task_position << std::endl;
-      // std::cout << "THRESHOLD: \n"
-      // << (q0_task_position(i) < 0.1 ? 1.0 : (1 - q0_task_position(i)))<< std::endl;;
-      std::cout << "ACc\n"
-                << acc << std::endl;
-      // std::cout << "delta_q0_dot: \n"
-      //           << delta_q0 - m_last_delta_q0 << std::endl;
-      // std::cout << "m_last_delta_q0: \n"
-      //           << m_last_delta_q0 << std::endl;
-      // std::cout << "Acceleration 0: \n"
-      //           << ddq0 << std::endl;
-      // std::cout << "DeltaTime: " << period.seconds() << std::endl;
-      i = 0;
-    }
+    real_t xOpt[6];
+    min_problem.getPrimalSolution( xOpt );
+    m_current_accelerations.data << xOpt[0], xOpt[1], xOpt[2], xOpt[3], xOpt[4], xOpt[5];
 
     // Numerical time integration with the Euler forward method
     m_current_positions.data = m_last_positions.data + m_last_velocities.data * period.seconds();
@@ -203,7 +178,7 @@ namespace cartesian_controller_base
     m_last_positions = m_current_positions;
     m_last_velocities = m_current_velocities;
 
-    m_last_delta_q0 = delta_q0;
+    // m_last_delta_q0 = delta_q0;
 
     return control_cmd;
   }
